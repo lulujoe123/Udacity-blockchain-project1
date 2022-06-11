@@ -65,14 +65,22 @@ class Blockchain {
     _addBlock(block) {
         let self = this;
         return new Promise(async (resolve, reject) => {
-            block.hash = SHA256(JSON.stringify(block)).toString();
             block.height = self.height + 1;
             block.time = parseInt(new Date().getTime().toString().slice(0, -3));
             if (self.height > -1) {
                 block.previousBlockHash = self.chain[self.chain.length-1].hash;
             }
-            self.chain.push(block);
-            self.height += 1;
+            block.hash = SHA256(JSON.stringify(block)).toString();
+            self.validateChain().then(errorLog => {
+                if (errorLog.length == 0) {
+                    self.chain.push(block);
+                    self.height += 1;
+                    resolve(block);
+                }
+                else {
+                    reject(errorLog);
+                }
+            });
         });
     }
 
@@ -117,9 +125,8 @@ class Blockchain {
             }
             else {
                 if (bitcoinMessage.verify(message, address, signature)){
-                    let block = new BlockClass.Block({owner: address, star: star});
-                    self._addBlock(block);
-                    resolve(block);
+                    let block = new BlockClass.Block({owner: address, star:star});
+                    self._addBlock(block).then(block => resolve(block)).catch(error => reject(error));
                 }
                 else {
                     reject("signature is not valid");
@@ -154,7 +161,7 @@ class Blockchain {
     getBlockByHeight(height) {
         let self = this;
         return new Promise((resolve, reject) => {
-            let block = self.chain.filter(p => p.height === height)[0];
+            let block = self.chain.find(p => p.height === height);
             if(block){
                 resolve(block);
             } else {
@@ -195,7 +202,7 @@ class Blockchain {
         return new Promise(async (resolve, reject) => {
             for(var i = 0; i < self.chain.length; i++){
                 let block = self.chain[i];
-                if (block.validate() === false){
+                if (await block.validate() === false){
                     errorLog.push({error: 'Block validation failed'});
                 }
                 if (i !== 0){
